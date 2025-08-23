@@ -1,14 +1,16 @@
 import re
+from flask import Flask, request, jsonify, render_template
+
+app = Flask(__name__)
 
 COMMON_PATTERNS = ["1234", "password", "qwerty", "1111", "abcd", "letmein"]
 
 def assess_password(password: str) -> dict:
     score = 0
     feedback = []
-
     length = len(password)
 
-    # Length scoring (max 30)
+    # Length scoring
     if length < 8:
         score += 5
         feedback.append("Make it at least 8 characters.")
@@ -21,7 +23,7 @@ def assess_password(password: str) -> dict:
         score += 30
         feedback.append("Great length — excellent!")
 
-    # Character variety (max 40)
+    # Character variety
     if re.search(r'[a-z]', password):
         score += 8
     else:
@@ -39,7 +41,7 @@ def assess_password(password: str) -> dict:
     else:
         feedback.append("Add special characters (e.g. !@#$%).")
 
-    # Penalties (max -30)
+    # Penalties
     lowered = password.lower()
     for pat in COMMON_PATTERNS:
         if pat in lowered:
@@ -47,22 +49,15 @@ def assess_password(password: str) -> dict:
             feedback.append(f"Avoid common pattern: '{pat}'.")
             break
 
-    # all same char
     if length >= 3 and len(set(password)) == 1:
         score -= 20
         feedback.append("Don't use the same character repeatedly.")
 
-    # sequential like 'abcd' or '1234'
     def is_sequential(s):
-        # check increasing sequences of letters or digits of length >=4
-        if len(s) < 4:
-            return False
+        if len(s) < 4: return False
         ords = [ord(c) for c in s]
-        # check for consecutive grows of 1
         return all(ords[i+1] - ords[i] == 1 for i in range(len(ords)-1))
 
-    # slide over substrings to detect simple sequences
-    lowered = password.lower()
     for i in range(len(lowered)-3):
         sub = lowered[i:i+4]
         if sub.isalpha() or sub.isdigit():
@@ -71,10 +66,8 @@ def assess_password(password: str) -> dict:
                 feedback.append("Avoid sequential characters like 'abcd' or '1234'.")
                 break
 
-    # Bound score 0-100
     final = max(0, min(100, score))
 
-    # Compute label
     if final < 25:
         label = "Very weak"
     elif final < 45:
@@ -89,15 +82,18 @@ def assess_password(password: str) -> dict:
     if not feedback:
         feedback.append("Good password! Minor improvement possible.")
 
-    return {
-        "password": password,
-        "score": final,
-        "label": label,
-        "feedback": feedback
-    }
+    return {"score": final, "label": label, "feedback": feedback}
 
-# Example
+@app.route("/")
+def home():
+    return render_template("index.html")
+
+@app.route("/check", methods=["POST"])
+def check():
+    data = request.json
+    password = data.get("password", "")
+    return jsonify(assess_password(password))
+
 if __name__ == "__main__":
-    for p in ["password123", "P@ssw0rd!", "abcde", "ThisIs@VeryLongPassword2025"]:
-        res = assess_password(p)
-        print(res)
+    app.run(debug=True)
+
