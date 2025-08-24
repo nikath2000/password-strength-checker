@@ -1,99 +1,52 @@
-import re
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, render_template, request
+import random
+import string
 
 app = Flask(__name__)
 
-COMMON_PATTERNS = ["1234", "password", "qwerty", "1111", "abcd", "letmein"]
+# Function to check password strength
+def check_strength(password):
+    strength = 0
+    if len(password) >= 8:
+        strength += 1
+    if any(c.islower() for c in password):
+        strength += 1
+    if any(c.isupper() for c in password):
+        strength += 1
+    if any(c.isdigit() for c in password):
+        strength += 1
+    if any(c in "!@#$%^&*()-_=+[]{};:'\",.<>?/\\|" for c in password):
+        strength += 1
 
-def assess_password(password: str) -> dict:
-    score = 0
-    feedback = []
-    length = len(password)
-
-    # Length scoring
-    if length < 8:
-        score += 5
-        feedback.append("Make it at least 8 characters.")
-    elif length < 12:
-        score += 15
-        feedback.append("Good length, consider 12+ for more safety.")
-    elif length < 16:
-        score += 22
+    if strength <= 2:
+        return "Weak"
+    elif strength == 3:
+        return "Medium"
     else:
-        score += 30
-        feedback.append("Great length — excellent!")
+        return "Strong"
 
-    # Character variety
-    if re.search(r'[a-z]', password):
-        score += 8
-    else:
-        feedback.append("Add lowercase letters.")
-    if re.search(r'[A-Z]', password):
-        score += 8
-    else:
-        feedback.append("Add uppercase letters.")
-    if re.search(r'\d', password):
-        score += 8
-    else:
-        feedback.append("Add numbers.")
-    if re.search(r'[^A-Za-z0-9]', password):
-        score += 16
-    else:
-        feedback.append("Add special characters (e.g. !@#$%).")
+# Function to generate a strong password
+def suggest_password(length=12):
+    characters = string.ascii_letters + string.digits + "!@#$%^&*()-_=+"
+    return ''.join(random.choice(characters) for _ in range(length))
 
-    # Penalties
-    lowered = password.lower()
-    for pat in COMMON_PATTERNS:
-        if pat in lowered:
-            score -= 20
-            feedback.append(f"Avoid common pattern: '{pat}'.")
-            break
-
-    if length >= 3 and len(set(password)) == 1:
-        score -= 20
-        feedback.append("Don't use the same character repeatedly.")
-
-    def is_sequential(s):
-        if len(s) < 4: return False
-        ords = [ord(c) for c in s]
-        return all(ords[i+1] - ords[i] == 1 for i in range(len(ords)-1))
-
-    for i in range(len(lowered)-3):
-        sub = lowered[i:i+4]
-        if sub.isalpha() or sub.isdigit():
-            if is_sequential(sub):
-                score -= 15
-                feedback.append("Avoid sequential characters like 'abcd' or '1234'.")
-                break
-
-    final = max(0, min(100, score))
-
-    if final < 25:
-        label = "Very weak"
-    elif final < 45:
-        label = "Weak"
-    elif final < 65:
-        label = "Fair"
-    elif final < 85:
-        label = "Strong"
-    else:
-        label = "Very strong"
-
-    if not feedback:
-        feedback.append("Good password! Minor improvement possible.")
-
-    return {"score": final, "label": label, "feedback": feedback}
-
-@app.route("/")
+@app.route("/", methods=["GET", "POST"])
 def home():
-    return render_template("index.html")
+    result = None
+    if request.method == "POST":
+        password = request.form.get("password")
+        result = check_strength(password)
+    return render_template("index.html", result=result)
 
-@app.route("/check", methods=["POST"])
-def check():
-    data = request.json
-    password = data.get("password", "")
-    return jsonify(assess_password(password))
+@app.route("/suggest", methods=["POST"])
+def suggest():
+    suggestion = suggest_password()
+    return render_template("index.html", suggestion=suggestion)
 
 if __name__ == "__main__":
     app.run(debug=True)
+
+   
+
+  
 
